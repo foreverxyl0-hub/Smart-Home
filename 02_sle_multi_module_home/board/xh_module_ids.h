@@ -1,0 +1,13 @@
+#ifndef XH_MODULE_IDS_H
+#define XH_MODULE_IDS_H
+
+#define XH_MODULE_ID_HUB_SCENE 0x00
+#define XH_MODULE_ID_SHT30 0x01
+#define XH_MODULE_ID_MQ2   0x02
+#define XH_MODULE_ID_FAN   0x03
+#define XH_MODULE_ID_BH1750 0x04
+#define XH_MODULE_ID_LD2401 0x05
+#define XH_MODULE_ID_ALARM 0x06
+#define XH_MODULE_ID_LIGHT 0x07
+
+#endif

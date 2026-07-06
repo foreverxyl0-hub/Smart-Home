@@ -1,0 +1,316 @@
+import("//vendor/atomgit/xiaohong-se/ws63_sdk.gni")
+
+declare_args() {
+  # "hub" builds the Xiaohong SE main-board firmware role. "module" builds
+  # external SLE module firmware and should be linked without the xiaohong app.
+  xh_sle_role = "hub"
+
+  # 1 SHT30, 2 MQ-2 smoke, 3 FAN, 4 BH1750 light, 5 LD2401 presence, 6 alarm, 7 WS2812 light.
+  xh_module_id = 1
+
+  xh_sle_api = 0
+  # Give the Hub and every module a deterministic, role-specific SLE address.
+  # This prevents four identical boards from being collapsed into one peer
+  # when their random-address generators start from the same state.
+  xh_custom_mac = 1
+
+  sht30_i2c_bus = 1
+  sht30_i2c_scl_pin = 16
+  sht30_i2c_sda_pin = 15
+  sht30_i2c_pin_mode = 2
+  sht30_i2c_baud = 400000
+
+  bh1750_i2c_bus = 1
+  bh1750_i2c_scl_pin = 16
+  bh1750_i2c_sda_pin = 15
+  bh1750_i2c_pin_mode = 2
+  bh1750_i2c_baud = 100000
+  bh1750_i2c_addr = 35
+  bh1750_sample_ms = 1000
+  bh1750_report_delta_lux100 = 1000
+  bh1750_heartbeat_ms = 10000
+  bh1750_reinit_ms = 5000
+
+  mq2_dout_pin = 9
+  mq2_dout_mode = 0
+  mq2_alarm_active_level = 0
+  mq2_poll_ms = 100
+  mq2_debounce_count = 3
+  mq2_warmup_ms = 60000
+  mq2_heartbeat_ms = 10000
+  mq2_adc_pin = 7
+  mq2_adc_pin_mode = 0
+  mq2_adc_channel = 0
+  mq2_adc_enable = true
+  mq2_adc_scan_ms = 200
+
+  fan_gpio_pin = 9
+  fan_gpio_mode = 0
+  fan_key_pin = 5
+  fan_key_mode = 4
+  fan_key_debounce_ms = 30
+  home_fan_trigger_temp100 = 3200
+  home_fan_release_temp100 = 3100
+  home_fan_trigger_humi100 = 5000
+  home_fan_release_humi100 = 4800
+  away_alarm_trigger_temp100 = 3500
+  away_alarm_release_temp100 = 3400
+  away_alarm_trigger_humi100 = 6000
+  away_alarm_release_humi100 = 5800
+
+  ld2401_out_pin = 9
+  ld2401_out_mode = 0
+  ld2401_poll_ms = 50
+  ld2401_debounce_ms = 200
+  ld2401_heartbeat_ms = 10000
+
+  alarm_led_pin = 9
+  alarm_led_mode = 0
+  alarm_led_active_level = 1
+  alarm_buzzer_pin = 7
+  alarm_buzzer_mode = 0
+  alarm_buzzer_active_level = 1
+  alarm_buzzer_freq_hz = 2731
+  alarm_buzzer_duty_percent = 50
+  # Keep the P4-triggered software wave bounded; continuous busy-wait wave can NMI.
+  alarm_buzzer_pulse_ms = 300
+  alarm_buzzer_wave_enable = true
+  alarm_boot_beep_test = false
+  alarm_tick_ms = 100
+  alarm_max_on_ms = 60000
+  alarm_short_beep_ms = 500
+
+  light_din_pin = 9
+  light_din_mode = 0
+  light_led_count = 6
+  light_heartbeat_ms = 10000
+  light_t0h_loops = 3
+  light_t0l_loops = 8
+  light_t1h_loops = 8
+  light_t1l_loops = 3
+  light_ws2812_diag_enable = true
+  light_ws2812_diag_profile_count = 5
+  light_ws2812_control_profile = 2
+}
+
+static_library("sle_multi_module_home") {
+  mq2_adc_enable_value = 0
+  if (mq2_adc_enable) {
+    mq2_adc_enable_value = 1
+  }
+  alarm_buzzer_wave_enable_value = 0
+  if (alarm_buzzer_wave_enable) {
+    alarm_buzzer_wave_enable_value = 1
+  }
+  light_ws2812_diag_enable_value = 0
+  if (light_ws2812_diag_enable) {
+    light_ws2812_diag_enable_value = 1
+  }
+
+  sources = [
+    "board/xh_module_app.c",
+    "board/xh_sensor_state.c",
+    "proto/xh_sle_proto.c",
+  ]
+
+  defines = [
+    "SUPPORT_OHOS=1",
+    "USE_OHOS_API=${xh_sle_api}",
+    "USE_CUSTOM_MAC_ADDR=${xh_custom_mac}",
+    "XH_BUILD_MODULE_ID=${xh_module_id}",
+    "XH_HOME_FAN_TRIGGER_TEMP100=${home_fan_trigger_temp100}",
+    "XH_HOME_FAN_RELEASE_TEMP100=${home_fan_release_temp100}",
+    "XH_HOME_FAN_TRIGGER_HUMI100=${home_fan_trigger_humi100}",
+    "XH_HOME_FAN_RELEASE_HUMI100=${home_fan_release_humi100}",
+    "XH_AWAY_ALARM_TRIGGER_TEMP100=${away_alarm_trigger_temp100}",
+    "XH_AWAY_ALARM_RELEASE_TEMP100=${away_alarm_release_temp100}",
+    "XH_AWAY_ALARM_TRIGGER_HUMI100=${away_alarm_trigger_humi100}",
+    "XH_AWAY_ALARM_RELEASE_HUMI100=${away_alarm_release_humi100}",
+  ]
+
+  include_dirs = [
+    "board",
+    "client",
+    "drivers",
+    "proto",
+    "sle",
+    "//utils/native/lite/include",
+    "//kernel/liteos_m/kal",
+    "//kernel/liteos_m/components/cmsis/2.0",
+    "${ws63_sdk_path}/include",
+    "${ws63_sdk_path}/include/driver",
+    "${ws63_sdk_path}/kernel/osal/include",
+    "${ws63_sdk_path}/kernel/osal/include/debug",
+    "${ws63_sdk_path}/kernel/osal/include/memory",
+    "${ws63_sdk_path}/kernel/osal/include/schedule",
+    "${ws63_sdk_path}/drivers/chips/ws63/rom/drivers/chips/ws63/porting/pinctrl",
+    "${ws63_sdk_path}/drivers/chips/ws63/porting/pinctrl",
+    "${ws63_sdk_path}/drivers/chips/ws63/porting/gpio",
+    "${ws63_sdk_path}/drivers/chips/ws63/porting/i2c",
+    "${ws63_sdk_path}/drivers/chips/ws63/porting/adc",
+    "${ws63_sdk_path}/drivers/drivers/hal/adc",
+    "${ws63_sdk_path}/drivers/drivers/hal/adc/v154",
+    "${ws63_sdk_path}/drivers/drivers/hal/gpio",
+    "${ws63_sdk_path}/drivers/drivers/hal/gpio/v150",
+    "${ws63_sdk_path}/drivers/drivers/hal/i2c",
+    "${ws63_sdk_path}/middleware/utils/app_init",
+    "${ws63_sdk_path}/middleware/utils/common_headers/native",
+    "${ws63_sdk_path}/include/middleware/services/bts/sle",
+    "//vendor/atomgit/xiaohong-se/xiaohong/src/audio/esp32p4",
+  ]
+
+  if (xh_sle_api == 1) {
+    sources += [ "sle/xh_sle_shim_weak.c" ]
+    include_dirs += [
+      "//device/soc/hisilicon/ws63v100/adapter/hals/communication/sle_lite/include",
+    ]
+  }
+
+  if (xh_sle_role == "hub") {
+    defines += [
+      "XH_BUILD_ROLE_HUB=1",
+      "SLE_1_CLIENT_M_SERVER=4",
+      "SLE_SERVER_NAME=\"XH_M_\"",
+    ]
+    sources += [
+      "board/xh_fan_control.c",
+      "board/xh_scene_rule.c",
+      "board/xh_sle_hub.c",
+      "sle/xh_sle_client.c",
+    ]
+  } else {
+    defines += [
+      "XH_BUILD_ROLE_HUB=0",
+      "SLE_N_CLIENT_1_SERVER=1",
+    ]
+    sources += [
+      "board/xh_sle_module_server.c",
+      "sle/xh_sle_server.c",
+      "sle/xh_sle_server_adv.c",
+    ]
+
+    if (xh_module_id == 1) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_01\"",
+        "CONFIG_I2C_SUPPORT_MASTER=1",
+        "SHT30_I2C_BUS_ID=${sht30_i2c_bus}",
+        "SHT30_I2C_SCL_PIN=${sht30_i2c_scl_pin}",
+        "SHT30_I2C_SDA_PIN=${sht30_i2c_sda_pin}",
+        "SHT30_I2C_PIN_MODE=${sht30_i2c_pin_mode}",
+        "SHT30_I2C_BAUD=${sht30_i2c_baud}",
+      ]
+      sources += [
+        "client/sht30.c",
+        "board/xh_sht30_module_app.c",
+      ]
+    } else if (xh_module_id == 2) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_02\"",
+        "XH_MQ2_DOUT_PIN=${mq2_dout_pin}",
+        "XH_MQ2_DOUT_MODE=${mq2_dout_mode}",
+        "XH_MQ2_ALARM_ACTIVE_LEVEL=${mq2_alarm_active_level}",
+        "XH_MQ2_POLL_MS=${mq2_poll_ms}",
+        "XH_MQ2_DEBOUNCE_COUNT=${mq2_debounce_count}",
+        "XH_MQ2_WARMUP_MS=${mq2_warmup_ms}",
+        "XH_MQ2_HEARTBEAT_MS=${mq2_heartbeat_ms}",
+        "XH_MQ2_ADC_PIN=${mq2_adc_pin}",
+        "XH_MQ2_ADC_PIN_MODE=${mq2_adc_pin_mode}",
+        "XH_MQ2_ADC_CHANNEL=${mq2_adc_channel}",
+        "XH_MQ2_ADC_ENABLE=${mq2_adc_enable_value}",
+        "XH_MQ2_ADC_SCAN_MS=${mq2_adc_scan_ms}",
+      ]
+      sources += [
+        "drivers/mq2_adc.c",
+        "drivers/mq2_gpio.c",
+        "board/xh_mq2_module_app.c",
+      ]
+    } else if (xh_module_id == 3) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_03\"",
+        "XH_FAN_GPIO_PIN=${fan_gpio_pin}",
+        "XH_FAN_GPIO_MODE=${fan_gpio_mode}",
+        "XH_FAN_KEY_PIN=${fan_key_pin}",
+        "XH_FAN_KEY_MODE=${fan_key_mode}",
+        "XH_FAN_KEY_DEBOUNCE_MS=${fan_key_debounce_ms}",
+      ]
+      sources += [
+        "drivers/fan_gpio.c",
+        "drivers/fan_key.c",
+        "board/xh_fan_module_app.c",
+      ]
+    } else if (xh_module_id == 4) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_04\"",
+        "CONFIG_I2C_SUPPORT_MASTER=1",
+        "BH1750_I2C_BUS_ID=${bh1750_i2c_bus}",
+        "BH1750_I2C_SCL_PIN=${bh1750_i2c_scl_pin}",
+        "BH1750_I2C_SDA_PIN=${bh1750_i2c_sda_pin}",
+        "BH1750_I2C_PIN_MODE=${bh1750_i2c_pin_mode}",
+        "BH1750_I2C_BAUD=${bh1750_i2c_baud}",
+        "BH1750_I2C_ADDR=${bh1750_i2c_addr}",
+        "XH_BH1750_SAMPLE_MS=${bh1750_sample_ms}",
+        "XH_BH1750_REPORT_DELTA_LUX100=${bh1750_report_delta_lux100}",
+        "XH_BH1750_HEARTBEAT_MS=${bh1750_heartbeat_ms}",
+        "XH_BH1750_REINIT_MS=${bh1750_reinit_ms}",
+      ]
+      sources += [
+        "drivers/bh1750.c",
+        "board/xh_bh1750_module_app.c",
+      ]
+    } else if (xh_module_id == 5) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_05\"",
+        "XH_LD2401_OUT_PIN=${ld2401_out_pin}",
+        "XH_LD2401_OUT_MODE=${ld2401_out_mode}",
+        "XH_LD2401_POLL_MS=${ld2401_poll_ms}",
+        "XH_LD2401_DEBOUNCE_MS=${ld2401_debounce_ms}",
+        "XH_LD2401_HEARTBEAT_MS=${ld2401_heartbeat_ms}",
+      ]
+      sources += [
+        "drivers/ld2401_gpio.c",
+        "board/xh_ld2401_module_app.c",
+      ]
+    } else if (xh_module_id == 6) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_06\"",
+        "XH_ALARM_LED_PIN=${alarm_led_pin}",
+        "XH_ALARM_LED_MODE=${alarm_led_mode}",
+        "XH_ALARM_LED_ACTIVE_LEVEL=${alarm_led_active_level}",
+        "XH_ALARM_BUZZER_PIN=${alarm_buzzer_pin}",
+        "XH_ALARM_BUZZER_MODE=${alarm_buzzer_mode}",
+        "XH_ALARM_BUZZER_ACTIVE_LEVEL=${alarm_buzzer_active_level}",
+        "XH_ALARM_BUZZER_FREQ_HZ=${alarm_buzzer_freq_hz}",
+        "XH_ALARM_BUZZER_DUTY_PERCENT=${alarm_buzzer_duty_percent}",
+        "XH_ALARM_BUZZER_PULSE_MS=${alarm_buzzer_pulse_ms}",
+        "XH_ALARM_BUZZER_WAVE_ENABLE=${alarm_buzzer_wave_enable_value}",
+        "XH_ALARM_BOOT_BEEP_TEST=0",
+        "XH_ALARM_TICK_MS=${alarm_tick_ms}",
+        "XH_ALARM_MAX_ON_MS=${alarm_max_on_ms}",
+        "XH_ALARM_SHORT_BEEP_MS=${alarm_short_beep_ms}",
+      ]
+      sources += [
+        "drivers/alarm_gpio.c",
+        "board/xh_alarm_module_app.c",
+      ]
+    } else if (xh_module_id == 7) {
+      defines += [
+        "SLE_SERVER_NAME=\"XH_M_07\"",
+        "XH_LIGHT_DIN_PIN=${light_din_pin}",
+        "XH_LIGHT_DIN_MODE=${light_din_mode}",
+        "XH_LIGHT_LED_COUNT=${light_led_count}",
+        "XH_LIGHT_HEARTBEAT_MS=${light_heartbeat_ms}",
+        "XH_WS2812_T0H_LOOPS=${light_t0h_loops}",
+        "XH_WS2812_T0L_LOOPS=${light_t0l_loops}",
+        "XH_WS2812_T1H_LOOPS=${light_t1h_loops}",
+        "XH_WS2812_T1L_LOOPS=${light_t1l_loops}",
+        "XH_WS2812_DIAG_ENABLE=${light_ws2812_diag_enable_value}",
+        "XH_WS2812_DIAG_PROFILE_COUNT=${light_ws2812_diag_profile_count}",
+        "XH_WS2812_CONTROL_PROFILE=${light_ws2812_control_profile}",
+      ]
+      sources += [
+        "drivers/ws2812.c",
+        "board/xh_light_module_app.c",
+      ]
+    }
+  }
+}
